@@ -1233,6 +1233,13 @@ export class SessionStore {
       concepts: string[];
       files_read: string[];
       files_modified: string[];
+      awareness?: {
+        awareness_layer?: 1 | 2 | 3 | 4;
+        relevance_signals?: string[];
+        recurrence_count?: number;
+        promoted_at?: number;
+        suppressed_until?: number | null;
+      };
     },
     promptNumber?: number,
     discoveryTokens: number = 0,
@@ -1242,11 +1249,20 @@ export class SessionStore {
     const timestampEpoch = overrideTimestampEpoch ?? Date.now();
     const timestampIso = new Date(timestampEpoch).toISOString();
 
+    // Extract awareness metadata with defaults
+    const awareness = observation.awareness ?? {};
+    const awarenessLayer = awareness.awareness_layer ?? 1; // Default: Raw
+    const relevanceSignals = JSON.stringify(awareness.relevance_signals ?? []);
+    const recurrenceCount = awareness.recurrence_count ?? 1;
+    const promotedAt = awareness.promoted_at ?? null;
+    const suppressedUntil = awareness.suppressed_until ?? null;
+
     const stmt = this.db.prepare(`
       INSERT INTO observations
       (memory_session_id, project, type, title, subtitle, facts, narrative, concepts,
-       files_read, files_modified, prompt_number, discovery_tokens, created_at, created_at_epoch)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       files_read, files_modified, prompt_number, discovery_tokens, created_at, created_at_epoch,
+       awareness_layer, relevance_signals, recurrence_count, promoted_at, suppressed_until)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = stmt.run(
@@ -1263,7 +1279,12 @@ export class SessionStore {
       promptNumber || null,
       discoveryTokens,
       timestampIso,
-      timestampEpoch
+      timestampEpoch,
+      awarenessLayer,
+      relevanceSignals,
+      recurrenceCount,
+      promotedAt,
+      suppressedUntil
     );
 
     return {

@@ -500,6 +500,62 @@ export const migration007: Migration = {
 
 
 /**
+ * Migration 008 - Add awareness layer metadata columns
+ * Implements the Cognitive Copilot awareness architecture:
+ * - awareness_layer: 1-4 representing Raw → Soft → Contextual → Active
+ * - relevance_signals: JSON array of context signals when this applies
+ * - recurrence_count: How often this pattern has been observed
+ * - promoted_at: Epoch timestamp when observation was promoted to current layer
+ * - suppressed_until: Epoch timestamp for temporary suppression (null = not suppressed)
+ */
+export const migration008: Migration = {
+  version: 8,
+  up: (db: Database) => {
+    // Add awareness layer columns to observations table
+    // Layer 1 = Raw (just observed), Layer 2 = Soft (noticed pattern),
+    // Layer 3 = Contextual (confirmed with context), Layer 4 = Active (ready to inject)
+    db.run(`ALTER TABLE observations ADD COLUMN awareness_layer INTEGER DEFAULT 1`);
+
+    // Relevance signals - JSON array of strings describing when this applies
+    // e.g., ["debugging", "typescript", "refactoring"]
+    db.run(`ALTER TABLE observations ADD COLUMN relevance_signals TEXT DEFAULT '[]'`);
+
+    // How many times this pattern has been observed (for promotion logic)
+    db.run(`ALTER TABLE observations ADD COLUMN recurrence_count INTEGER DEFAULT 1`);
+
+    // When was this observation promoted to its current layer?
+    db.run(`ALTER TABLE observations ADD COLUMN promoted_at INTEGER`);
+
+    // Temporary suppression - epoch timestamp until which this should not be injected
+    db.run(`ALTER TABLE observations ADD COLUMN suppressed_until INTEGER`);
+
+    // Create indexes for efficient filtering by awareness layer
+    db.run(`CREATE INDEX IF NOT EXISTS idx_observations_awareness_layer ON observations(awareness_layer)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_observations_suppressed ON observations(suppressed_until)`);
+
+    // Migrate existing observations: Set to Layer 2 (soft awareness) since they were
+    // deemed important enough to store, and set promoted_at to their creation time
+    db.run(`
+      UPDATE observations
+      SET awareness_layer = 2,
+          promoted_at = created_at_epoch
+      WHERE awareness_layer IS NULL OR awareness_layer = 1
+    `);
+
+    console.log('✅ Added awareness layer metadata columns to observations table');
+  },
+
+  down: (db: Database) => {
+    // SQLite limitations - log warning
+    db.run(`DROP INDEX IF EXISTS idx_observations_awareness_layer`);
+    db.run(`DROP INDEX IF EXISTS idx_observations_suppressed`);
+    console.log('⚠️  Warning: SQLite ALTER TABLE DROP COLUMN not fully supported');
+    console.log('⚠️  To fully rollback, manually recreate the observations table');
+  }
+};
+
+
+/**
  * All migrations in order
  */
 export const migrations: Migration[] = [
@@ -509,5 +565,6 @@ export const migrations: Migration[] = [
   migration004,
   migration005,
   migration006,
-  migration007
+  migration007,
+  migration008
 ];
