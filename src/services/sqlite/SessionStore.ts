@@ -2308,4 +2308,177 @@ export class SessionStore {
 
     stmt.run(newLayer, promotedAt, observationId, newLayer);
   }
+
+  // ============================================================================
+  // Feedback Tracking Methods (Phase 5)
+  // ============================================================================
+
+  /**
+   * Record a feedback event for an observation
+   */
+  recordFeedbackEvent(
+    observationId: number,
+    signal: string,
+    timestamp: number,
+    context?: string,
+    sessionId?: string
+  ): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO feedback_events (observation_id, signal, timestamp, context, session_id)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    stmt.run(observationId, signal, timestamp, context || null, sessionId || null);
+  }
+
+  /**
+   * Increment show count when an observation is displayed in context
+   */
+  incrementObservationShowCount(observationId: number, timestamp: number): void {
+    const stmt = this.db.prepare(`
+      UPDATE observations
+      SET show_count = COALESCE(show_count, 0) + 1,
+          last_shown_at = ?
+      WHERE id = ?
+    `);
+    stmt.run(timestamp, observationId);
+  }
+
+  /**
+   * Increment helpful count when user engages with observation
+   */
+  incrementObservationHelpfulCount(observationId: number, timestamp: number): void {
+    const stmt = this.db.prepare(`
+      UPDATE observations
+      SET helpful_count = COALESCE(helpful_count, 0) + 1,
+          last_feedback_at = ?
+      WHERE id = ?
+    `);
+    stmt.run(timestamp, observationId);
+  }
+
+  /**
+   * Increment ignored count when observation was shown but not engaged with
+   */
+  incrementObservationIgnoredCount(observationId: number, timestamp: number): void {
+    const stmt = this.db.prepare(`
+      UPDATE observations
+      SET ignored_count = COALESCE(ignored_count, 0) + 1,
+          last_feedback_at = ?
+      WHERE id = ?
+    `);
+    stmt.run(timestamp, observationId);
+  }
+
+  /**
+   * Get effectiveness stats for an observation
+   */
+  getObservationEffectiveness(observationId: number): {
+    observationId: number;
+    showCount: number;
+    helpfulCount: number;
+    ignoredCount: number;
+    suppressCount: number;
+    effectivenessRatio: number;
+    lastFeedback: number;
+  } | null {
+    const stmt = this.db.prepare(`
+      SELECT
+        id,
+        COALESCE(show_count, 0) as show_count,
+        COALESCE(helpful_count, 0) as helpful_count,
+        COALESCE(ignored_count, 0) as ignored_count,
+        COALESCE(last_feedback_at, 0) as last_feedback_at
+      FROM observations
+      WHERE id = ?
+    `);
+
+    const row = stmt.get(observationId) as {
+      id: number;
+      show_count: number;
+      helpful_count: number;
+      ignored_count: number;
+      last_feedback_at: number;
+    } | undefined;
+
+    if (!row) return null;
+
+    // Count suppress events
+    const suppressStmt = this.db.prepare(`
+      SELECT COUNT(*) as count FROM feedback_events
+      WHERE observation_id = ? AND signal = 'suppress'
+    `);
+    const suppressRow = suppressStmt.get(observationId) as { count: number };
+
+    const showCount = row.show_count;
+    const effectivenessRatio = showCount > 0
+      ? row.helpful_count / showCount
+      : 0;
+
+    return {
+      observationId: row.id,
+      showCount,
+      helpfulCount: row.helpful_count,
+      ignoredCount: row.ignored_count,
+      suppressCount: suppressRow.count,
+      effectivenessRatio,
+      lastFeedback: row.last_feedback_at,
+    };
+  }
+
+  /**
+   * Get observations eligible for effectiveness evaluation
+   * Returns observations with enough show data for meaningful evaluation
+   */
+  getObservationsForEffectivenessEvaluation(
+    project: string,
+    minShows: number
+  ): Array<{ id: number; awareness_layer: number | null }> {
+    const stmt = this.db.prepare(`
+      SELECT id, awareness_layer
+      FROM observations
+      WHERE project = ?
+        AND COALESCE(show_count, 0) >= ?
+      ORDER BY last_feedback_at DESC
+      LIMIT 100
+    `);
+
+    return stmt.all(project, minShows) as Array<{ id: number; awareness_layer: number | null }>;
+  }
+
+  /**
+   * Suppress an observation until a given timestamp
+   */
+  suppressObservation(observationId: number, suppressUntil: number): void {
+    const stmt = this.db.prepare(`
+      UPDATE observations
+      SET suppressed_until = ?
+      WHERE id = ?
+    `);
+    stmt.run(suppressUntil, observationId);
+  }
+
+  /**
+   * Demote an observation to a lower awareness layer
+   */
+  demoteObservationLayer(observationId: number, newLayer: 1 | 2 | 3 | 4, demotedAt: number): void {
+    const stmt = this.db.prepare(`
+      UPDATE observations
+      SET awareness_layer = ?, last_feedback_at = ?
+      WHERE id = ? AND awareness_layer > ?
+    `);
+    stmt.run(newLayer, demotedAt, observationId, newLayer);
+  }
+
+  /**
+   * Clear expired suppressions, returning count of cleared
+   */
+  clearExpiredSuppressions(currentTime: number): number {
+    const stmt = this.db.prepare(`
+      UPDATE observations
+      SET suppressed_until = NULL
+      WHERE suppressed_until IS NOT NULL AND suppressed_until < ?
+    `);
+    const result = stmt.run(currentTime);
+    return result.changes;
+  }
 }

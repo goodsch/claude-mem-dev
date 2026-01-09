@@ -229,6 +229,37 @@ NEVER fetch full details without filtering first. 10x token savings.`,
     handler: async (args: any) => {
       return await callWorkerAPIPost('/api/observations/batch', args);
     }
+  },
+  {
+    name: 'feedback',
+    description: `Record feedback on observations. Signals: 'helpful' (engaged with), 'ignored' (shown but not used), 'suppress' (hide for 24h), 'demote' (reduce visibility). Params: observationId (required), signal (required), context (optional), sessionId (optional)`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        observationId: {
+          type: 'number',
+          description: 'ID of the observation to provide feedback on'
+        },
+        signal: {
+          type: 'string',
+          enum: ['helpful', 'ignored', 'suppress', 'demote'],
+          description: 'Type of feedback signal'
+        },
+        context: {
+          type: 'string',
+          description: 'Optional context about why feedback was given'
+        },
+        sessionId: {
+          type: 'string',
+          description: 'Session ID where feedback occurred'
+        }
+      },
+      required: ['observationId', 'signal'],
+      additionalProperties: false
+    },
+    handler: async (args: any) => {
+      return await callWorkerAPIPost('/api/feedback', args);
+    }
   }
 ];
 

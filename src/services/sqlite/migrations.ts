@@ -556,6 +556,58 @@ export const migration008: Migration = {
 
 
 /**
+ * Migration 009 - Add feedback tracking for awareness system
+ * Implements Phase 5 (Feedback Loops) of the Cognitive Copilot:
+ * - Feedback events table to track all feedback signals
+ * - Effectiveness columns on observations for implicit feedback
+ * - Indexes for efficient feedback queries
+ */
+export const migration009: Migration = {
+  version: 9,
+  up: (db: Database) => {
+    // Create feedback_events table to track all feedback signals
+    db.run(`
+      CREATE TABLE IF NOT EXISTS feedback_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        observation_id INTEGER NOT NULL,
+        signal TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        context TEXT,
+        session_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (observation_id) REFERENCES observations(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Indexes for feedback queries
+    db.run(`CREATE INDEX IF NOT EXISTS idx_feedback_observation ON feedback_events(observation_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_feedback_signal ON feedback_events(signal)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_feedback_timestamp ON feedback_events(timestamp DESC)`);
+
+    // Add effectiveness tracking columns to observations
+    // These are denormalized for performance - updated on feedback events
+    db.run(`ALTER TABLE observations ADD COLUMN show_count INTEGER DEFAULT 0`);
+    db.run(`ALTER TABLE observations ADD COLUMN helpful_count INTEGER DEFAULT 0`);
+    db.run(`ALTER TABLE observations ADD COLUMN ignored_count INTEGER DEFAULT 0`);
+    db.run(`ALTER TABLE observations ADD COLUMN last_shown_at INTEGER`);
+    db.run(`ALTER TABLE observations ADD COLUMN last_feedback_at INTEGER`);
+
+    // Index for effectiveness evaluation queries
+    db.run(`CREATE INDEX IF NOT EXISTS idx_observations_show_count ON observations(show_count)`);
+
+    console.log('✅ Added feedback tracking tables and columns');
+  },
+
+  down: (db: Database) => {
+    db.run(`DROP TABLE IF EXISTS feedback_events`);
+    db.run(`DROP INDEX IF EXISTS idx_observations_show_count`);
+    console.log('⚠️  Warning: SQLite ALTER TABLE DROP COLUMN not fully supported');
+    console.log('⚠️  To fully rollback, manually recreate the observations table');
+  }
+};
+
+
+/**
  * All migrations in order
  */
 export const migrations: Migration[] = [
@@ -566,5 +618,6 @@ export const migrations: Migration[] = [
   migration005,
   migration006,
   migration007,
-  migration008
+  migration008,
+  migration009
 ];
