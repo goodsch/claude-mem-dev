@@ -31,3 +31,12 @@ src/ui/viewer.html
 # Prevent other malformed path directories
 http*/
 https*/
+
+# Compiled plugin scripts (regenerated from TypeScript source)
+plugin/scripts/*.cjs
+
+# Auto-generated AI context files
+**/CLAUDE.md
+
+# Serena MCP working directory
+.serena/
