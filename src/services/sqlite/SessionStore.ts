@@ -2158,4 +2158,154 @@ export class SessionStore {
 
     return { imported: true, id: result.lastInsertRowid as number };
   }
+
+  // ============================================================================
+  // CrystallizerAgent Support Methods
+  // ============================================================================
+
+  /**
+   * Get pattern observations for a project (type='pattern' from NoticerAgent)
+   * Used by CrystallizerAgent for crystallization
+   */
+  getPatternObservationsForProject(project: string, limit: number = 50): Array<{
+    id: number;
+    type: string;
+    title: string | null;
+    subtitle: string | null;
+    facts: string;
+    narrative: string | null;
+    concepts: string;
+    relevance_signals: string;
+    recurrence_count: number;
+    awareness_layer: number;
+    created_at_epoch: number;
+  }> {
+    const stmt = this.db.prepare(`
+      SELECT id, type, title, subtitle, facts, narrative, concepts,
+             relevance_signals, recurrence_count, awareness_layer, created_at_epoch
+      FROM observations
+      WHERE project = ? AND type = 'pattern'
+      ORDER BY recurrence_count DESC, created_at_epoch DESC
+      LIMIT ?
+    `);
+
+    return stmt.all(project, limit) as Array<{
+      id: number;
+      type: string;
+      title: string | null;
+      subtitle: string | null;
+      facts: string;
+      narrative: string | null;
+      concepts: string;
+      relevance_signals: string;
+      recurrence_count: number;
+      awareness_layer: number;
+      created_at_epoch: number;
+    }>;
+  }
+
+  /**
+   * Get recent observations for a project (all types)
+   * Used by CrystallizerAgent for context
+   */
+  getRecentObservationsForProject(project: string, limit: number = 30): ObservationRecord[] {
+    const stmt = this.db.prepare(`
+      SELECT *
+      FROM observations
+      WHERE project = ?
+      ORDER BY created_at_epoch DESC
+      LIMIT ?
+    `);
+
+    return stmt.all(project, limit) as ObservationRecord[];
+  }
+
+  /**
+   * Get total observation count for a project
+   * Used by CrystallizerAgent to track if enough new observations exist
+   */
+  getObservationCountForProject(project: string): number {
+    const stmt = this.db.prepare(`
+      SELECT COUNT(*) as count
+      FROM observations
+      WHERE project = ?
+    `);
+
+    const result = stmt.get(project) as { count: number } | undefined;
+    return result?.count ?? 0;
+  }
+
+  /**
+   * Get living document for a project
+   * Living documents are stored in the overviews table with origin='crystallizer'
+   */
+  getLivingDocument(project: string): import('../worker/CrystallizerAgent.js').LivingDocument | null {
+    const stmt = this.db.prepare(`
+      SELECT content
+      FROM overviews
+      WHERE project = ? AND origin = 'crystallizer'
+      ORDER BY created_at_epoch DESC
+      LIMIT 1
+    `);
+
+    const result = stmt.get(project) as { content: string } | undefined;
+    if (!result) return null;
+
+    try {
+      return JSON.parse(result.content) as import('../worker/CrystallizerAgent.js').LivingDocument;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Store living document for a project
+   * Stored in overviews table with origin='crystallizer'
+   */
+  storeLivingDocument(project: string, document: import('../worker/CrystallizerAgent.js').LivingDocument): void {
+    const now = new Date();
+    const content = JSON.stringify(document);
+
+    // Use session_id as a placeholder since overviews table requires it
+    // For crystallizer documents, we use a synthetic session ID
+    const syntheticSessionId = `crystallizer:${project}`;
+
+    // Check if we need to create a synthetic session entry first
+    const existingSession = this.db.prepare(`
+      SELECT session_id FROM sessions WHERE session_id = ?
+    `).get(syntheticSessionId);
+
+    if (!existingSession) {
+      this.db.prepare(`
+        INSERT INTO sessions (session_id, project, created_at, created_at_epoch, source)
+        VALUES (?, ?, ?, ?, 'crystallizer')
+      `).run(syntheticSessionId, project, now.toISOString(), Date.now());
+    }
+
+    // Insert new living document
+    this.db.prepare(`
+      INSERT INTO overviews (session_id, content, created_at, created_at_epoch, project, origin)
+      VALUES (?, ?, ?, ?, ?, 'crystallizer')
+    `).run(syntheticSessionId, content, now.toISOString(), Date.now(), project);
+
+    logger.info('CRYSTALLIZER', 'Stored living document', {
+      project,
+      decidedCount: document.decidedConcepts.length,
+      fluidCount: document.fluidConcepts.length
+    });
+  }
+
+  /**
+   * Promote an observation to a higher awareness layer
+   * Used by CrystallizerAgent when crystallizing patterns
+   */
+  promoteObservationLayer(observationId: number, newLayer: 1 | 2 | 3 | 4, promotedAt: number): void {
+    const stmt = this.db.prepare(`
+      UPDATE observations
+      SET awareness_layer = ?, promoted_at = ?
+      WHERE id = ? AND awareness_layer < ?
+    `);
+
+    stmt.run(newLayer, promotedAt, observationId, newLayer);
+  }
 }

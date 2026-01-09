@@ -34,6 +34,16 @@ export interface WorkerRef {
       worker?: WorkerRef
     ): Promise<void>;
   };
+  /**
+   * CrystallizerAgent for living document maintenance (Phase 3 of Cognitive Copilot)
+   * Called periodically to crystallize patterns into decided vs fluid concepts
+   */
+  crystallizerAgent?: {
+    crystallize(
+      project: string,
+      worker?: WorkerRef
+    ): Promise<import('../CrystallizerAgent.js').LivingDocument | null>;
+  };
 }
 
 // ============================================================================

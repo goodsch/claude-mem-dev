@@ -60,6 +60,7 @@ import { SDKAgent } from './worker/SDKAgent.js';
 import { GeminiAgent } from './worker/GeminiAgent.js';
 import { OpenRouterAgent } from './worker/OpenRouterAgent.js';
 import { NoticerAgent } from './worker/NoticerAgent.js';
+import { CrystallizerAgent } from './worker/CrystallizerAgent.js';
 import { PaginationHelper } from './worker/PaginationHelper.js';
 import { SettingsManager } from './worker/SettingsManager.js';
 import { SearchManager } from './worker/SearchManager.js';
@@ -96,6 +97,7 @@ export class WorkerService {
   private geminiAgent: GeminiAgent;
   private openRouterAgent: OpenRouterAgent;
   private _noticerAgent: NoticerAgent;
+  private _crystallizerAgent: CrystallizerAgent;
   private paginationHelper: PaginationHelper;
   private settingsManager: SettingsManager;
   private sessionEventBroadcaster: SessionEventBroadcaster;
@@ -123,6 +125,7 @@ export class WorkerService {
     this.openRouterAgent = new OpenRouterAgent(this.dbManager, this.sessionManager);
     this.openRouterAgent.setFallbackAgent(this.sdkAgent);
     this._noticerAgent = new NoticerAgent(this.dbManager);
+    this._crystallizerAgent = new CrystallizerAgent(this.dbManager);
     this.paginationHelper = new PaginationHelper(this.dbManager);
     this.settingsManager = new SettingsManager(this.dbManager);
     this.sessionEventBroadcaster = new SessionEventBroadcaster(this._sseBroadcaster, this);
@@ -427,6 +430,13 @@ export class WorkerService {
    */
   get noticerAgent(): NoticerAgent {
     return this._noticerAgent;
+  }
+
+  /**
+   * Get CrystallizerAgent for living document maintenance (Phase 3 of Cognitive Copilot)
+   */
+  get crystallizerAgent(): CrystallizerAgent {
+    return this._crystallizerAgent;
   }
 }
 

@@ -113,6 +113,20 @@ export async function processAgentResponse(
     });
   }
 
+  // Trigger CrystallizerAgent for living document maintenance (fire-and-forget, non-blocking)
+  // This runs periodically to crystallize patterns into decided vs fluid concepts
+  // Has its own cooldown logic to avoid running too frequently
+  if (worker?.crystallizerAgent) {
+    worker.crystallizerAgent.crystallize(
+      session.project,
+      worker
+    ).catch(error => {
+      logger.warn('CRYSTALLIZER', 'Crystallization trigger failed (non-critical)', {
+        project: session.project
+      }, error as Error);
+    });
+  }
+
   // AFTER transaction commits - async operations (can fail safely without data loss)
   await syncAndBroadcastObservations(
     observations,
