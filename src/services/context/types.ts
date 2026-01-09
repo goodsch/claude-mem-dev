@@ -60,6 +60,14 @@ export interface Observation {
   created_at_epoch: number;
   /** Project this observation belongs to (for multi-project queries) */
   project?: string;
+  /** Awareness layer (1=Raw, 2=Soft, 3=Contextual, 4=Active) */
+  awareness_layer?: number | null;
+  /** JSON array of relevance signals (when to surface this observation) */
+  relevance_signals?: string | null;
+  /** How many times this pattern has been observed */
+  recurrence_count?: number | null;
+  /** Timestamp until which this should not be injected */
+  suppressed_until?: number | null;
 }
 
 /**

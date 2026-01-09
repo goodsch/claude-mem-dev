@@ -36,7 +36,8 @@ export function queryObservations(
     SELECT
       id, memory_session_id, type, title, subtitle, narrative,
       facts, concepts, files_read, files_modified, discovery_tokens,
-      created_at, created_at_epoch
+      created_at, created_at_epoch,
+      awareness_layer, relevance_signals, recurrence_count, suppressed_until
     FROM observations
     WHERE project = ?
       AND type IN (${typePlaceholders})
@@ -89,7 +90,8 @@ export function queryObservationsMulti(
     SELECT
       id, memory_session_id, type, title, subtitle, narrative,
       facts, concepts, files_read, files_modified, discovery_tokens,
-      created_at, created_at_epoch, project
+      created_at, created_at_epoch, project,
+      awareness_layer, relevance_signals, recurrence_count, suppressed_until
     FROM observations
     WHERE project IN (${projectPlaceholders})
       AND type IN (${typePlaceholders})
