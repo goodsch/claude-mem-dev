@@ -59,6 +59,7 @@ import { SSEBroadcaster } from './worker/SSEBroadcaster.js';
 import { SDKAgent } from './worker/SDKAgent.js';
 import { GeminiAgent } from './worker/GeminiAgent.js';
 import { OpenRouterAgent } from './worker/OpenRouterAgent.js';
+import { NoticerAgent } from './worker/NoticerAgent.js';
 import { PaginationHelper } from './worker/PaginationHelper.js';
 import { SettingsManager } from './worker/SettingsManager.js';
 import { SearchManager } from './worker/SearchManager.js';
@@ -90,10 +91,11 @@ export class WorkerService {
   // Service layer
   private dbManager: DatabaseManager;
   private sessionManager: SessionManager;
-  private sseBroadcaster: SSEBroadcaster;
+  private _sseBroadcaster: SSEBroadcaster;
   private sdkAgent: SDKAgent;
   private geminiAgent: GeminiAgent;
   private openRouterAgent: OpenRouterAgent;
+  private _noticerAgent: NoticerAgent;
   private paginationHelper: PaginationHelper;
   private settingsManager: SettingsManager;
   private sessionEventBroadcaster: SessionEventBroadcaster;
@@ -114,15 +116,16 @@ export class WorkerService {
     // Initialize service layer
     this.dbManager = new DatabaseManager();
     this.sessionManager = new SessionManager(this.dbManager);
-    this.sseBroadcaster = new SSEBroadcaster();
+    this._sseBroadcaster = new SSEBroadcaster();
     this.sdkAgent = new SDKAgent(this.dbManager, this.sessionManager);
     this.geminiAgent = new GeminiAgent(this.dbManager, this.sessionManager);
     this.geminiAgent.setFallbackAgent(this.sdkAgent);
     this.openRouterAgent = new OpenRouterAgent(this.dbManager, this.sessionManager);
     this.openRouterAgent.setFallbackAgent(this.sdkAgent);
+    this._noticerAgent = new NoticerAgent(this.dbManager);
     this.paginationHelper = new PaginationHelper(this.dbManager);
     this.settingsManager = new SettingsManager(this.dbManager);
-    this.sessionEventBroadcaster = new SessionEventBroadcaster(this.sseBroadcaster, this);
+    this.sessionEventBroadcaster = new SessionEventBroadcaster(this._sseBroadcaster, this);
 
     // Set callback for when sessions are deleted
     this.sessionManager.setOnSessionDeleted(() => {
@@ -172,9 +175,9 @@ export class WorkerService {
    */
   private registerRoutes(): void {
     // Standard routes
-    this.server.registerRoutes(new ViewerRoutes(this.sseBroadcaster, this.dbManager, this.sessionManager));
+    this.server.registerRoutes(new ViewerRoutes(this._sseBroadcaster, this.dbManager, this.sessionManager));
     this.server.registerRoutes(new SessionRoutes(this.sessionManager, this.dbManager, this.sdkAgent, this.geminiAgent, this.openRouterAgent, this.sessionEventBroadcaster, this));
-    this.server.registerRoutes(new DataRoutes(this.paginationHelper, this.dbManager, this.sessionManager, this.sseBroadcaster, this, this.startTime));
+    this.server.registerRoutes(new DataRoutes(this.paginationHelper, this.dbManager, this.sessionManager, this._sseBroadcaster, this, this.startTime));
     this.server.registerRoutes(new SettingsRoutes(this.settingsManager));
     this.server.registerRoutes(new LogsRoutes());
 
@@ -400,11 +403,30 @@ export class WorkerService {
       activeSessions
     });
 
-    this.sseBroadcaster.broadcast({
+    this._sseBroadcaster.broadcast({
       type: 'processing_status',
       isProcessing,
       queueDepth
     });
+  }
+
+  // ============================================================================
+  // WorkerRef Interface Implementation
+  // These getters expose internal components for use by agents via WorkerRef
+  // ============================================================================
+
+  /**
+   * Get SSE broadcaster for agents to broadcast observations
+   */
+  get sseBroadcaster(): SSEBroadcaster {
+    return this._sseBroadcaster;
+  }
+
+  /**
+   * Get NoticerAgent for pattern detection (Phase 2 of Cognitive Copilot)
+   */
+  get noticerAgent(): NoticerAgent {
+    return this._noticerAgent;
   }
 }
 

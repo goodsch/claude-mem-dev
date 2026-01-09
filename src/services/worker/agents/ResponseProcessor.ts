@@ -98,6 +98,21 @@ export async function processAgentResponse(
     memorySessionId: session.memorySessionId
   });
 
+  // Trigger NoticerAgent for pattern detection (fire-and-forget, non-blocking)
+  // This runs after observations are stored to detect patterns asynchronously
+  if (worker?.noticerAgent && result.observationIds.length > 0) {
+    worker.noticerAgent.detectPatterns(
+      session.sessionDbId,
+      session.memorySessionId!,
+      session.project,
+      worker
+    ).catch(error => {
+      logger.warn('NOTICER', 'Pattern detection trigger failed (non-critical)', {
+        sessionId: session.sessionDbId
+      }, error as Error);
+    });
+  }
+
   // AFTER transaction commits - async operations (can fail safely without data loss)
   await syncAndBroadcastObservations(
     observations,

@@ -96,7 +96,7 @@ export function getObservationsByIds(
 }
 
 /**
- * Get observations for a specific session
+ * Get observations for a specific session (minimal data for UI listing)
  */
 export function getObservationsForSession(
   db: Database,
@@ -110,4 +110,24 @@ export function getObservationsForSession(
   `);
 
   return stmt.all(memorySessionId) as ObservationSessionRow[];
+}
+
+/**
+ * Get recent observations for a session (full data for pattern analysis)
+ * Used by NoticerAgent for background pattern detection
+ */
+export function getRecentObservationsForSession(
+  db: Database,
+  memorySessionId: string,
+  limit: number = 20
+): ObservationRecord[] {
+  const stmt = db.prepare(`
+    SELECT *
+    FROM observations
+    WHERE memory_session_id = ?
+    ORDER BY created_at_epoch DESC
+    LIMIT ?
+  `);
+
+  return stmt.all(memorySessionId, limit) as ObservationRecord[];
 }

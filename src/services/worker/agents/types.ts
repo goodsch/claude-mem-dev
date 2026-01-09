@@ -14,15 +14,26 @@ import type { ParsedObservation, ParsedSummary } from '../../../sdk/parser.js';
 // ============================================================================
 
 /**
- * Worker reference for SSE broadcasting and status updates
- * Both sseBroadcaster and broadcastProcessingStatus are optional
- * to allow agents to run without a full worker context (e.g., testing)
+ * Worker reference for SSE broadcasting, status updates, and background agents
+ * All fields are optional to allow agents to run without a full worker context (e.g., testing)
  */
 export interface WorkerRef {
   sseBroadcaster?: {
     broadcast(event: SSEEventPayload): void;
   };
   broadcastProcessingStatus?: () => void;
+  /**
+   * NoticerAgent for background pattern detection (Phase 2 of Cognitive Copilot)
+   * Called after observations are stored to detect patterns asynchronously
+   */
+  noticerAgent?: {
+    detectPatterns(
+      sessionDbId: number,
+      memorySessionId: string,
+      project: string,
+      worker?: WorkerRef
+    ): Promise<void>;
+  };
 }
 
 // ============================================================================

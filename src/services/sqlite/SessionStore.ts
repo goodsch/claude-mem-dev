@@ -890,7 +890,7 @@ export class SessionStore {
   }
 
   /**
-   * Get observations for a specific session
+   * Get observations for a specific session (minimal data for UI listing)
    */
   getObservationsForSession(memorySessionId: string): Array<{
     title: string;
@@ -906,6 +906,22 @@ export class SessionStore {
     `);
 
     return stmt.all(memorySessionId);
+  }
+
+  /**
+   * Get recent observations for a session (full data for pattern analysis)
+   * Used by NoticerAgent for background pattern detection
+   */
+  getRecentObservationsForSession(memorySessionId: string, limit: number = 20): ObservationRecord[] {
+    const stmt = this.db.prepare(`
+      SELECT *
+      FROM observations
+      WHERE memory_session_id = ?
+      ORDER BY created_at_epoch DESC
+      LIMIT ?
+    `);
+
+    return stmt.all(memorySessionId, limit) as ObservationRecord[];
   }
 
   /**
